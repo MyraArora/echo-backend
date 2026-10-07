@@ -5,7 +5,7 @@ from firebase_admin import credentials, firestore
 from pydantic import BaseModel
 
 # 1. Initialize Firebase Admin SDK
-KEY_PATH = "serviceAccountKey.json"
+KEY_PATH = "FIREBASE_CREDENTIALS"
 
 if not firebase_admin._apps:
     if os.path.exists(KEY_PATH):

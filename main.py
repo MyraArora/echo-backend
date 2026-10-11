@@ -96,7 +96,7 @@ def run_pipeline_task(user_id: str, session_id: str, bucket_name: str, gcs_audio
 
 @app.get("/")
 def health_check():
-    return {"status": "online", "message": "Echo pipeline engine running on Render!"}
+    return {"status": "online", "message": "Echo pipeline engine is running on Render!"}
 
 @app.post("/api/v1/process-session", status_code=202)
 def process_session(payload: ProcessSessionRequest, background_tasks: BackgroundTasks):

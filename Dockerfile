@@ -1,4 +1,3 @@
-# Use lightweight official Python image
 FROM python:3.11-slim
 
 # Prevent Python from writing .pyc files to disk and enable unbuffered logging
@@ -7,15 +6,20 @@ ENV PYTHONUNBUFFERED=1
 
 WORKDIR /app
 
-# Install dependencies first for efficient layer caching
+# Install system dependencies including ffmpeg for librosa audio decoding
+RUN apt-get update && apt-get install -y --no-install-recommends \
+    ffmpeg \
+    build-essential \
+    && rm -rf /var/lib/apt/lists/*
+
+# Install Python requirements
 COPY requirements.txt .
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Copy source code
 COPY . .
 
-# Cloud Run injects the PORT environment variable dynamically (defaults to 8080)
-ENV PORT=8080
+ENV PORT=10000
 
-# Run uvicorn on 0.0.0.0 to listen on all network interfaces
-CMD exec uvicorn app.main:app --host 0.0.0.0 --port $PORT
+# Run uvicorn (Adjust main:app or app.main:app to match your project structure)
+CMD exec uvicorn main:app --host 0.0.0.0 --port $PORT

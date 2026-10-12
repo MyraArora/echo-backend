@@ -5,6 +5,7 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from pydantic import BaseModel
 from typing import Optional
+from pydub import AudioSegment
 
 # Import complete pipeline suite
 from app.pipeline.audio_fetcher import download_audio_from_gcs
@@ -46,6 +47,9 @@ def run_pipeline_task(user_id: str, session_id: str, bucket_name: str, gcs_audio
     """Automated background execution pipeline connecting Fetcher -> STT -> Engines A, B, C -> Firestore"""
     session_ref = db.collection("users").document(user_id).collection("sessions").document(session_id)
     
+    local_audio_path = None
+    normalized_path = None
+    
     try:
         session_ref.update({
             "status": "PROCESSING",
@@ -55,22 +59,31 @@ def run_pipeline_task(user_id: str, session_id: str, bucket_name: str, gcs_audio
         # Step 1: Download audio file locally
         local_audio_path = download_audio_from_gcs(bucket_name, gcs_audio_path)
 
+        # Step 1.5: Safely normalize & convert audio to clean PCM WAV using pydub
+        try:
+            audio = AudioSegment.from_file(local_audio_path)
+            normalized_path = f"/tmp/normalized_{session_id}.wav"
+            audio = audio.set_channels(1).set_frame_rate(16000)
+            audio.export(normalized_path, format="wav")
+            print(f"[AudioPipeline] Successfully normalized audio to {normalized_path}")
+        except Exception as conv_err:
+            print(f"[AudioPipeline] Warning: pydub conversion failed ({conv_err}), falling back to raw downloaded file.")
+            normalized_path = local_audio_path
+
+        audio_for_processing = normalized_path if os.path.exists(normalized_path) else local_audio_path
+
         # Step 2: Auto-transcribe if transcript was not pre-supplied
         if not transcript or not transcript.strip():
             print(f"[Pipeline] Auto-transcribing audio for session {session_id}...")
-            transcript = transcribe_audio_file(local_audio_path)
+            transcript = transcribe_audio_file(audio_for_processing)
 
         # Step 3: Run Engine A (Acoustic / Prosodic Features from Audio)
-        acoustic_metrics = extract_acoustic_features(local_audio_path)
-
-        # Clean up local audio temp file
-        if os.path.exists(local_audio_path):
-            os.remove(local_audio_path)
+        acoustic_metrics = extract_acoustic_features(audio_for_processing)
 
         # Step 4: Run Engine B (Lexical / Syntactic Features from Transcript)
         lexical_metrics = extract_lexical_syntactic_features(transcript)
 
-        # Step 5: Run Engine C (Narrative / Discourse Features via Gemini)
+        # Step 5: Run Engine C (Narrative / Discourse Features)
         narrative_metrics = extract_narrative_features(transcript)
 
         # Step 6: Consolidate & write to Firestore
@@ -93,6 +106,18 @@ def run_pipeline_task(user_id: str, session_id: str, bucket_name: str, gcs_audio
             "error_message": str(e),
             "updated_at": firestore.SERVER_TIMESTAMP
         })
+    finally:
+        # Cleanup temporary files
+        if local_audio_path and os.path.exists(local_audio_path):
+            try:
+                os.remove(local_audio_path)
+            except Exception:
+                pass
+        if normalized_path and os.path.exists(normalized_path) and normalized_path != local_audio_path:
+            try:
+                os.remove(normalized_path)
+            except Exception:
+                pass
 
 @app.get("/")
 def health_check():

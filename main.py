@@ -38,7 +38,7 @@ app = FastAPI(title="Echo Cognitive Monitoring Pipeline")
 class ProcessSessionRequest(BaseModel):
     user_id: str
     session_id: str
-    bucket_name: str = "echo-audio-bucket"
+    bucket_name: str = "echo-c1d62.firebasestorage.app"
     gcs_audio_path: str
     transcript: Optional[str] = None  # Auto-generated if omitted
 

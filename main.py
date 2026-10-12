@@ -5,7 +5,8 @@ import firebase_admin
 from firebase_admin import credentials, firestore
 from pydantic import BaseModel
 from typing import Optional
-from pydub import AudioSegment
+import soundfile as sf
+import librosa
 
 # Import complete pipeline suite
 from app.pipeline.audio_fetcher import download_audio_from_gcs
@@ -59,15 +60,15 @@ def run_pipeline_task(user_id: str, session_id: str, bucket_name: str, gcs_audio
         # Step 1: Download audio file locally
         local_audio_path = download_audio_from_gcs(bucket_name, gcs_audio_path)
 
-        # Step 1.5: Safely normalize & convert audio to clean PCM WAV using pydub
+        # Step 1.5: Safely normalize & resample audio to 16kHz mono WAV using librosa + soundfile
         try:
-            audio = AudioSegment.from_file(local_audio_path)
+            # Load with librosa (automatically handles underlying decoders via ffmpeg/libsndfile)
+            y, sr = librosa.load(local_audio_path, sr=16000, mono=True)
             normalized_path = f"/tmp/normalized_{session_id}.wav"
-            audio = audio.set_channels(1).set_frame_rate(16000)
-            audio.export(normalized_path, format="wav")
+            sf.write(normalized_path, y, 16000)
             print(f"[AudioPipeline] Successfully normalized audio to {normalized_path}")
         except Exception as conv_err:
-            print(f"[AudioPipeline] Warning: pydub conversion failed ({conv_err}), falling back to raw downloaded file.")
+            print(f"[AudioPipeline] Warning: normalization failed ({conv_err}), falling back to raw downloaded file.")
             normalized_path = local_audio_path
 
         audio_for_processing = normalized_path if os.path.exists(normalized_path) else local_audio_path

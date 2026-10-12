@@ -25,5 +25,16 @@ def download_audio_from_gcs(bucket_name: str, gcs_blob_path: str) -> str:
     
     blob.download_to_filename(local_file_path)
     print(f"[AudioFetcher] Successfully downloaded gs://{bucket_name}/{gcs_blob_path} to {local_file_path}")
+    size = os.path.getsize(local_file_path)
+
+    with open(local_file_path, "rb") as f:
+        header = f.read(32)
+
+    print(
+        f"[AudioFetcher] size={size} bytes, "
+        f"content_type={blob.content_type!r}, "
+        f"header_hex={header.hex()}, "
+        f"header_repr={header!r}"
+    )
     
     return local_file_path

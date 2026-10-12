@@ -1,26 +1,25 @@
 import os
 import json
-from google import genai
-from google.genai import types
+from groq import Groq
 
 def extract_narrative_features(transcript: str) -> dict:
     """
-    Evaluates higher-level discourse and narrative metrics using Gemini:
+    Evaluates higher-level discourse and narrative metrics using Groq:
     - Topic Coherence Score (0-10)
     - Ambiguous Reference Count
     - Idea Repetition Score (0-10)
     """
-    api_key = os.getenv("GEMINI_API_KEY")
+    api_key = os.getenv("GROQ_API_KEY")
     if not api_key:
-        print("[NarrativeEngine] Warning: GEMINI_API_KEY environment variable not found.")
+        print("[NarrativeEngine] Warning: GROQ_API_KEY environment variable not found.")
         return {
             "coherence_score": 5.0,
             "ambiguous_reference_count": 0,
             "repetition_score": 0.0,
-            "narrative_notes": "Gemini API key missing; default scores applied."
+            "narrative_notes": "Groq API key missing; default scores applied."
         }
 
-    client = genai.Client(api_key=api_key)
+    client = Groq(api_key=api_key)
 
     prompt = f"""
     You are a clinical linguistic assistant evaluating speech for cognitive monitoring.
@@ -39,16 +38,17 @@ def extract_narrative_features(transcript: str) -> dict:
     """
 
     try:
-        response = client.models.generate_content(
-            model="gemini-3.8-flash",
-            contents=prompt,
-            config=types.GenerateContentConfig(
-                response_mime_type="application/json",
-                temperature=0.0
-            )
+        response = client.chat.completions.create(
+            model="openai/gpt-oss-120b",
+            messages=[
+                {"role": "system", "content": "You are a helpful clinical assistant that outputs strict JSON."},
+                {"role": "user", "content": prompt}
+            ],
+            response_format={"type": "json_object"},
+            temperature=0.0
         )
         
-        result = json.loads(response.text)
+        result = json.loads(response.choices[0].message.content)
         return {
             "coherence_score": float(result.get("coherence_score", 5.0)),
             "ambiguous_reference_count": int(result.get("ambiguous_reference_count", 0)),
@@ -56,7 +56,7 @@ def extract_narrative_features(transcript: str) -> dict:
             "narrative_notes": str(result.get("narrative_notes", ""))
         }
     except Exception as e:
-        print(f"[NarrativeEngine] Error during Gemini extraction: {e}")
+        print(f"[NarrativeEngine] Error during Groq extraction: {e}")
         return {
             "coherence_score": 5.0,
             "ambiguous_reference_count": 0,
